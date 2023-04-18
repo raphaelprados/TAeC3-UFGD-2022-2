@@ -64,8 +64,15 @@ public:
     // Funcoes de overloading
     friend std::ostream& operator<<(std::ostream& os, Voo& voo);
     bool operator>=(Voo const& voo) {
-        // Verifica se os voos chegam depois, ao mesmo tempo, ou um antes do outro
-        return {!(this->chegada > voo.chegada) || (this->chegada == voo.chegada ? 
+        // Se dois voos chegam ao mesmo tempo, tem privilegio os com maior tempo de voo
+        if(this->chegada == voo.chegada)
+            return ((this->chegada - this->partida) > (voo.chegada - voo.partida) ? true : false);
+        // Se dois voos partem ao mesmo tempo, tem privilegio o que foi cadastrado primeiro
+        else if(this->partida == voo.partida)
+            return true;
+        // se dois voos partem e chegam ao mesmo tempo
+        else
+            return {(this->chegada < voo.chegada) || (this->chegada == voo.chegada ? 
                     (this->chegada - this->partida) > (voo.chegada - voo.partida) : true)};
     }
     void operator=(strct_voo const& struct_voo) {
@@ -76,14 +83,13 @@ public:
         this->partida = struct_voo.partida;
         this->chegada = struct_voo.chegada;
     }
-    void operator++(int r) {
+    void operator+=(int r) {
         if(r == 1) {
             this->partida++;
             this->chegada++;    
         } else if(r == 0) {
             this->chegada++;
         }
-        
     }
 
     // Conversao voo -> struct 
@@ -163,7 +169,7 @@ public:
         // Cria o struct do voo
         struct strct_voo struct_voo;
         struct_voo.ativo = true;
-        struct_voo.codigo = 100 * this->codigo + saidas.size();
+        struct_voo.codigo = 100 * (this->codigo + 1) + saidas.size();
         struct_voo.destino = input[0];
         struct_voo.partida = input[1];
         struct_voo.chegada = struct_voo.partida + input[2];
@@ -174,7 +180,7 @@ public:
 
         // Verifica se o horario do novo voo nao tem conflito com um ja programado
         if(conflitos(temp_voo))
-            temp_voo++;
+            temp_voo+=1;
 
         // Salva o estado de lançamento de voos
         temp_voo = struct_voo;
@@ -211,7 +217,7 @@ public:
         std::string dados;
 
         dados = "Codigo: " + std::to_string(this->codigo) + "\n" +
-            "Pousos: " + std::to_string(saidas.size()) + " Decolagens: " + std::to_string(chegadas.size()) + "\n" +
+            "Pousos: " + std::to_string(this->pousos) + " Decolagens: " + std::to_string(this->decolagens) + "\n" +
             "Pousos | Origem | Chegada | Tempo Voo\n";
         for(long unsigned i = 0; i < chegadas.size(); i++)
             dados += chegadas[i].toString(false) + "\n";
@@ -239,24 +245,29 @@ public:
                 case 2:    
                     /* Trecho de Comunicação */
                     std::cout << "Aguardando outros aeroportos..." << std::endl;
-                    comunicacao(size);
+                    MPI_Barrier(MPI_COMM_WORLD);
                     /* Trecho de ordenacao e execucao de pousos/decolagens */
-                    if(escalonarVoos() == 'c') {
-                        int c = 0;
-                        for(; !chegadas[c].getAtivo(); c++) {}
-                        chegadas[c].pousoDecolagem();
-                        std::cout << chegadas[c].codigo << " pousou" << std::endl;
-                    } else {
-                        int s = 0;
-                        for(; !saidas[s].getAtivo(); s++) {}
-                        saidas[s].pousoDecolagem();
-                        std::cout << saidas[s].codigo << " decolou" << std::endl;
+                    char result = escalonarVoos();
+                    if(result == 'p') {
+                        unsigned long c = 0;                        
+                        for(; c < chegadas.size() && !chegadas[c].getAtivo(); c++) {}                        
+                        if(c < chegadas.size()) {
+                            chegadas[c].pousoDecolagem();
+                            pousos++;
+                        }
+                    } else if(result == 'd') {
+                        unsigned long s = 0;
+                        for(; s < saidas.size() && !saidas[s].getAtivo(); s++) {}
+                        if(s < saidas.size()) {
+                            saidas[s].pousoDecolagem();
+                            decolagens++;
+                        }
                     }
+                    
                     //Recomunica os voos, possivelmente modificados
                     comunicacao(size);
                     timer++;
-                    break;
-                default:
+                    system("clear");
                     break;
             }
         }
@@ -310,7 +321,8 @@ public:
 
     void sortSaidas(int s, int r) {
         Voo temp;
-
+        if(s >= r)
+            return;
         for(int i = s; i < r; i++) {
             for(int j = s; j < r - 1; j++) {
                 if(saidas[j] >= saidas[j+1]) {
@@ -324,7 +336,8 @@ public:
 
     void sortChegadas(int c, int r) {
         Voo temp;
-
+        if(c >= r)
+            return;
         for(int i = c; i < r; i++) {
             for(int j = c; j < r - 1; j++) {
                 if(chegadas[j] >= chegadas[j+1]) {
@@ -339,16 +352,37 @@ public:
     char escalonarVoos() {
         Voo temp;
         // Obtem os indices dos proximos voos 
-        int s = 0;
-        int c = 0;
-        for(; !saidas[s].getAtivo(); s++ ) {}
-        for(; !chegadas[c].getAtivo(); c++) {}
+        unsigned long s = 0;
+        unsigned long c = 0;
+        while(s < saidas.size() && !saidas[s].getAtivo()) { s++; } // 
+        while(c != chegadas.size() && !chegadas[c].getAtivo()) { c++; }
         // Sort das saidas
         sortSaidas(s, saidas.size());
         // Sort das chegadas
         sortChegadas(c, chegadas.size());
-        return {((saidas[s].partida >= chegadas[c].chegada) ? 
-                    'c' : 'p')};
+
+        if(s < saidas.size()) {
+            if(c < chegadas.size()) {
+                // Não ha pousos nem decolagens
+                if(saidas[s].partida != timer && chegadas[c].chegada != timer)
+                    return 'n';
+                // Ha um pouso ou uma decolagem, de acordo com a prioridade do escalonamento
+                else {
+                    if(saidas[s].partida == chegadas[c].chegada)
+                        saidas[s]+=1;
+                    return {((saidas[s].partida >= chegadas[c].chegada) ? 
+                                'p' : 'd')};
+                }                    
+            } else {
+                return (saidas[s].partida == timer ? 'd' : 'n');
+            }
+        } else if(c < chegadas.size()) {
+            return (chegadas[c].chegada == timer ? 'p' : 'n');
+        } else {
+            return 'n';
+        }
+        
+        return 'f';
     }
 
     // Funcoes Friend
