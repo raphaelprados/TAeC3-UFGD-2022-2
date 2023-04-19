@@ -1,4 +1,17 @@
 
+/*
+    Disciplina: Tópicos Avançados em Computação III - 2022.2 - UFGD - FACET - Engenharia da Computação
+    Discentes: Raphael Alexsander Prado dos Santos
+    Docente: Giovane Lagustera Silvestrim 
+    Data de entrega: 18 abr. 2023
+
+    Modo de Uso:
+
+    Digite 1 para adicionar voos, colocando as informacoes pedidas. 
+    Digite 2 para executar cada passagem de tempo
+    Todas as janelas abertas devem entrar no modo de executar para que o tempo possa passar
+*/
+
 #include <iostream>
 #include <cstdlib>
 #include <vector>
@@ -107,8 +120,32 @@ public:
     }
     std::string toString(bool decolagem) {
         std::string temp;
-        temp = std::to_string(this->codigo) + " " + std::to_string(decolagem ? this->destino : this->origem) + " " 
-                + (decolagem ? std::to_string(this->partida) : std::to_string(this->chegada)) + " "
+        std::string espacos[4];
+        // Criar os espacos entre os numeros
+        if(decolagem) {
+            for(int i = 11 - std::to_string(this->codigo).size(); i != 0; i--)
+                espacos[0] += " ";
+            for(int i = 8 - std::to_string(this->destino).size(); i != 0; i--)
+                espacos[1] += " ";
+            for(int i = 8 - std::to_string(this->partida).size(); i != 0; i--)
+                espacos[2] += " ";
+        }
+        else {
+            for(int i = 7 - std::to_string(this->codigo).size(); i != 0; i--)
+                espacos[0] += " ";
+            for(int i = 7 - std::to_string(this->origem).size(); i != 0; i--)
+                espacos[1] += " ";
+            for(int i = 8 - std::to_string(this->chegada).size(); i != 0; i--)
+                espacos[2] += " ";
+        }
+        for(int i = 13 - std::to_string(this->chegada - this->partida).size(); i != 0; i--)
+            espacos[3] += " ";
+        espacos[0] += "| ";
+        espacos[1] += "| ";
+        espacos[2] += "| ";
+        // Gera a string
+        temp = std::to_string(this->codigo) + espacos[0] + std::to_string(decolagem ? this->destino : this->origem) + espacos[1] 
+                + (decolagem ? std::to_string(this->partida) : std::to_string(this->chegada)) + espacos[2]
                 + std::to_string(this->chegada - this->partida);
         return temp;
     }
